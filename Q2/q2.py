@@ -10,11 +10,12 @@ import matplotlib.pyplot as plt
 
 
 use_cuda = torch.cuda.is_available()
-input_csv_dir = "iris.data.csv"
+dataDir = "D:/TAU/EX1/EX1/Q2"
+input_csv_dir = dataDir + "/iris.data.csv"
 
 #hyperparameters
 batch_size = 5
-lr = 0.0001
+lr = 0.0002
 num_epoch = 500
 
 
@@ -98,7 +99,7 @@ def main():
     train_losses = []
     validation_losses=[]
     fig = plt.figure()
-    for epoch in range(num_epoch):
+    for ep_n,epoch in enumerate(range(num_epoch)):
         epoch_train_loss = 0
         epoch_counter = 0
         for data in train_loader:
@@ -119,7 +120,7 @@ def main():
         # evaluate on validation set
         loss_validation = criterion(net(X_val),y_val)
         validation_losses.append(loss_validation.data.cpu().numpy())
-
+        print('ephoch: %d loss: %f' %(ep_n,loss_validation.data.cpu().numpy()))
 
         plt.plot(train_losses,color= 'b')
         plt.plot(validation_losses, color='r')
@@ -133,8 +134,10 @@ def main():
     out = net(X_test)
     _, predicted = torch.max(out.data.cpu(), 1)
     # get accuration
+    test_loss = criterion(out, y_test)
+    print('test lost %f ' % test_loss)
     print('Accuracy of the network %d %%' % (100 * torch.sum(y_test.data.cpu() == predicted) / len(y_test)))
-    fig.savefig('training.png')
+    fig.savefig('Q2_results.png')
 
 
 

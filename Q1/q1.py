@@ -33,7 +33,7 @@ criterion = nn.MSELoss()
 optimizer = optim.Adam(net.parameters(),lr=0.01)
 
 # open file for writing
-file  = open("results.txt", "w")
+file  = open("Q1_results.txt", "w")
 
 # train
 print('training:')
