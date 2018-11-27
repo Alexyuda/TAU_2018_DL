@@ -1,3 +1,6 @@
+# This function creates two numpy array files with random patches
+# One for 12net and the other for 24net
+
 import numpy as np
 from PIL import Image
 from matplotlib import pyplot as plt
