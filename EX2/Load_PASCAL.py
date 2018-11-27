@@ -8,42 +8,53 @@ import matplotlib.image as mpimg
 dir_person = "C:/Users/user007/Desktop/shani/CS/EX2_data/EX2_data/PASCAL/VOCdevkit/VOC2007/ImageSets/Main/person_train.txt"
 dir_images = "C:/Users/user007/Desktop/shani/CS/EX2_data/EX2_data/PASCAL/VOCdevkit/VOC2007/JPEGImages/"
 
-# dimensions of patches 12/24
-dim = 12
+def create_PASCAL_imgs(dim, max_patches):
 
-# dimensions of max patches per image
-max_patches = 15
+    # Create a list of images without a person
+    #(in person_train.txt a line with label == -1 is a negative sample)
+    myarray = np.loadtxt(dir_person)
+    myarray_new = np.zeros(myarray.shape[0])
+    j = 0
+    for i,line in enumerate(myarray):
+        if (line[1] == -1):
+            myarray_new[j] = line[0]
+            j += 1
+    neg_file_array  = myarray_new[:j]
 
-# create list of images without person
-# in person_train.txt a line with label == -1 is a negative sample
-myarray = np.loadtxt(dir_person)
+    # Create random patches:
+    # Every patch line in patches describes a patch with dimensions = (12,12,3)
+    #(total lines = max_patches * len(neg_file_array))
+    patches = np.zeros((max_patches * len(neg_file_array), dim, dim, 3),dtype=int)
 
-myarray_new = np.zeros(myarray.shape[0])
-j = 0
-for i,line in enumerate(myarray):
-    if (line[1] == -1):
-        myarray_new[j] = line[0]
-        j += 1
+    # create patches
+    i = 0
+    for line in neg_file_array:
+        filename = str(int(line)).zfill(6) + '.jpg'
+        img = mpimg.imread(dir_images + filename)
+        img_patches = image.extract_patches_2d(img, (dim, dim), max_patches=max_patches)
+        patches[i:i + max_patches] = img_patches
+        # plt.imshow(img_patches[14])
+        # plt.imshow(patches[i + 14])
+        # plt.imshow(patches[i + 5])
+        i += max_patches
 
-neg_file_array  = myarray_new[:j]
-# print(neg_file_array.shape[0])
+    # plt.imshow(patches[14])
+    # plt.show()
 
-# every patch line describes a patch with dimensions = (12,12,3)
-# total lines = max_patches * len(neg_file_array)
-patches = np.zeros((max_patches * len(neg_file_array), dim, dim, 3),dtype=int)
+    # Change dimensions to (total patches, 3, dim, dim)
+    patches = np.moveaxis(patches, -1, 1)
+    print(patches.shape)
 
-# create patches
-i = 0
-for line in neg_file_array:
-    filename = str(int(line)).zfill(6) + '.jpg'
-    img = mpimg.imread(dir_images + filename)
-    img_patches = image.extract_patches_2d(img, (dim, dim), max_patches=max_patches)
-    patches[i:i + max_patches] = img_patches
-    # plt.imshow(img_patches[14])
-    # plt.imshow(patches[i + 14])
-    i += max_patches
+    filename = 'PASCAL_imgs_' + str(dim) + '.npy'
+    np.save(filename, patches)
 
 
-print(patches.shape)
-plt.imshow(patches[14])
-plt.show()
+def load_PASCAL_imgs(dim):
+    filename = 'PASCAL_imgs_' + str(dim) + '.npy'
+    PASCAL_imgs = np.load(filename)
+    return PASCAL_imgs
+
+
+if __name__ == '__main__':
+    create_PASCAL_imgs(dim = 12, max_patches = 15)
+    create_PASCAL_imgs(dim = 24, max_patches = 15)
