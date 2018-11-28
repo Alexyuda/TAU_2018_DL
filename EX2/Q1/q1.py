@@ -66,8 +66,8 @@ def create_PASCAL_imgs(personDir,pascalDir,dim, max_patches):
     print("loaded pascal data: %s" % (patches.shape,))
     return patches
 
-EPHOCS = 500
-BATCH_SIZE = 32
+EPOCHS = 50
+BATCH_SIZE = 100
 LR = 0.001
 TEST_SPLIT = .2
 PASCAL_TO_AFLW_RATIO = 3
@@ -97,8 +97,11 @@ shuffled_indices = torch.randperm(length_data)
 split = int(np.floor(TEST_SPLIT * length_data))
 indices_train = shuffled_indices[split:]
 indices_val = shuffled_indices[:split]
-X_train_aflw, X_test_aflw = aflwData[indices_train], aflwData[indices_val]
+X_train_aflw, X_test = aflwData[indices_train], aflwData[indices_val]
 X_train_pascal = pascalData[0:min(len(aflwData)*PASCAL_TO_AFLW_RATIO,pascalData.shape[0]-1)]
+
+X_test = torch.Tensor(X_test).float()
+y_val_target = torch.Tensor(np.zeros(X_test.shape[0])).long()
 
 y_train_aflw = np.zeros((X_train_aflw.shape[0],1),dtype=int)
 y_train_pascal = np.ones((X_train_pascal.shape[0],1),dtype=int)
@@ -106,7 +109,6 @@ y_train_pascal = np.ones((X_train_pascal.shape[0],1),dtype=int)
 X_train = np.concatenate((X_train_aflw,X_train_pascal),0)
 y_train = np.concatenate((y_train_aflw,y_train_pascal),0)
 
-# set seed for random indices of data (for debugging)
 dataSetTrain = aflwDataSet(X_train,y_train)
 train_loader = DataLoader(dataset=dataSetTrain, batch_size=BATCH_SIZE, shuffle=True)
 
@@ -130,11 +132,17 @@ loss_fn = torch.nn.CrossEntropyLoss()
 optimizer = optim.Adam(net.parameters(),lr=LR)
 
 # TRAIN
-print("{0:15} {1:20}".format('EPOCHS','Train loss'))
-for ep_n, epoch in enumerate(range(EPHOCS)):
+loss_train_arr = []
+loss_val_arr = []
+print("{0:15} {1:20} {2:20}".format('EPOCHS','Train loss','Test loss'))
+fig = plt.figure()
+for ep_n, epoch in enumerate(range(EPOCHS)):
+    running_loss = 0
+    # run on train set
     for data in train_loader:
-
         inputs, targets = data
+        targets = torch.squeeze(targets,dim=1)
+
         if use_cuda:
             inputs = inputs.cuda()
             targets = targets.cuda()
@@ -143,13 +151,37 @@ for ep_n, epoch in enumerate(range(EPHOCS)):
         optimizer.zero_grad()
         outputs = net(inputs)
 
-        targets = torch.squeeze(targets)
-
         loss = loss_fn(outputs, targets)
-        print("{0:3d} {1:20f} ".format(ep_n, loss.data.cpu().numpy()))
         loss.backward()
         optimizer.step()
+        running_loss += loss.item()
 
+    # run on test set
+    with torch.set_grad_enabled(False):
+        if use_cuda:
+            X_test = X_test.cuda()
+            y_val_target = y_val_target.cuda()
+        y_val = net(X_test)
+        loss_val = loss_fn(y_val, y_val_target)
+        loss_val_arr.append(loss_val.cpu().data.numpy())
+
+    loss_train_arr.append(running_loss/len(train_loader))
+    print("{0:3d} {1:20f} {2:20f} ".format(ep_n, running_loss/len(train_loader),loss_val.cpu().data.numpy() ))
+
+    plt.cla()
+    plt.plot(loss_val_arr, linewidth=3)
+    plt.plot(loss_train_arr, linewidth=3)
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['test', 'train'], loc='upper right')
+    plt.pause(0.01)
+
+_, predicted = torch.max(y_val.data.cpu(), 1)
+print('Network accuracy %d %%' % (100 * torch.sum(y_val_target.data.cpu() == predicted) / len(y_val)))
+
+fig.savefig("q1.png")
+# save model
+torch.save(net, "12net.pth")
 
 
 
