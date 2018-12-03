@@ -66,9 +66,9 @@ def create_PASCAL_imgs(personDir,pascalDir,dim, max_patches):
     print("loaded pascal data: %s" % (patches.shape,))
     return patches
 
-EPOCHS = 50
-BATCH_SIZE = 100
-LR = 0.001
+EPOCHS = 200
+BATCH_SIZE = 256
+LR = 0.0005
 TEST_SPLIT = .2
 PASCAL_TO_AFLW_RATIO = 3
 
