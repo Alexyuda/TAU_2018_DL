@@ -112,7 +112,7 @@ def createBoxes(netResult, stride, winHalfSize = 6):
     for j in range(0, netResult.shape[1]):
       if (isFace[i, j]):
         row = int(stride * i - (stride / 2.0))
-        col = int(stride * j - (stride / 2.0))
+        col = int(stride * j + (stride / 2.0))
         x_min = np.maximum(0, col - winHalfSize)
         y_min = np.maximum(0, row - winHalfSize)
         x_max = np.minimum(width, col + winHalfSize)
