@@ -1,3 +1,8 @@
+
+
+# get dataset
+data_main = "drive/My Drive/Colab Notebooks/TAU_2018_DL/HW2/EX2_data"
+
 import torch
 import torchfile
 import numpy as np
@@ -7,7 +12,8 @@ import matplotlib.image as mpimg
 from torch.utils.data import Dataset,DataLoader
 from torchsummary import summary
 import torch.optim as optim
-
+from PIL import Image
+from skimage import transform
 
 class aflwDataSet(Dataset):
     def __init__(self, x, y):
@@ -46,11 +52,14 @@ def create_PASCAL_imgs(personDir,pascalDir,dim, max_patches):
     patches = np.zeros((max_patches * len(neg_file_array), dim, dim, 3),dtype=float)
 
     # create patches
+    rszScale = 0.25
     i = 0
     for line in neg_file_array:
         filename = str(int(line)).zfill(6) + '.jpg'
         img = mpimg.imread(pascalDir + filename)/255
-        img_patches = image.extract_patches_2d(img, (dim, dim), max_patches=max_patches)
+        # scale image to fit 12net faces sizes
+        img_resized = transform.resize(img, (int(img.shape[0]* rszScale), int(img.shape[1]* rszScale)))
+        img_patches = image.extract_patches_2d(img_resized, (dim, dim), max_patches=max_patches)
         patches[i:i + max_patches] = img_patches
         # plt.imshow(img_patches[14])
         # plt.show()
@@ -66,28 +75,31 @@ def create_PASCAL_imgs(personDir,pascalDir,dim, max_patches):
     print("loaded pascal data: %s" % (patches.shape,))
     return patches
 
-EPOCHS = 200
-BATCH_SIZE = 256
-LR = 0.0005
-TEST_SPLIT = .2
+data_main = "drive/My Drive/Colab Notebooks/TAU_2018_DL/HW2/EX2_data"
+data_aflw = data_main + "/aflw/aflw_12.t7"
+data_pascal_imgs =  data_main + "/VOC2007/VOCdevkit/VOC2007/JPEGImages/"
+data_pascal_personIdx =  data_main + "/VOC2007/VOCdevkit/VOC2007/ImageSets/Main/person_train.txt"
+
+EPOCHS = 50
+BATCH_SIZE = 128
+LR = 0.001
+TEST_SPLIT = .1
 PASCAL_TO_AFLW_RATIO = 3
 
 use_cuda = torch.cuda.is_available()
 
 # load aflw Data
-aflwDir = "D:/TAU/EX2/EX2_data/aflw/aflw_12.t7"
-aflwDataTorch  = torchfile.load(aflwDir, force_8bytes_long = True)
+aflwDir = data_aflw #"D:/TAU/EX2/EX2_data/aflw/aflw_12.t7"
+aflwDataTorch  = torchfile.load(aflwDir) #CHANGED BY NIR , force_8bytes_long = True)
 aflwData = np.zeros((len(aflwDataTorch),3 ,12, 12),dtype=float)
 for i in range(len(aflwDataTorch)):
     aflwData[i] = aflwDataTorch[i+1]
 print('loaded aflwData data: (%s, %s, %s, %s)' %(len(aflwData),aflwData[1].shape[0],aflwData[1].shape[1],aflwData[1].shape[2]) )
 print(type(aflwData))
-# plt.imshow( np.moveaxis(aflwData[0], 0, -1))
-# plt.show()
 
 # load pascal data
-personDir = "D:/TAU/EX2/EX2_data/VOC2007/ImageSets/Main/person_train.txt"
-pascalDir = "D:/TAU/EX2/EX2_data/VOC2007/JPEGImages/"
+personDir = data_pascal_personIdx #"D:/TAU/EX2/EX2_data/VOC2007/ImageSets/Main/person_train.txt"
+pascalDir = data_pascal_imgs #"D:/TAU/EX2/EX2_data/VOC2007/JPEGImages/"
 pascalData = create_PASCAL_imgs(personDir,pascalDir,12, 60)
 print(type(pascalData))
 
@@ -113,6 +125,7 @@ dataSetTrain = aflwDataSet(X_train,y_train)
 train_loader = DataLoader(dataset=dataSetTrain, batch_size=BATCH_SIZE, shuffle=True)
 
 # define the model
+# torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride=1)
 net = torch.nn.Sequential(
           torch.nn.Conv2d(3, 16, 3,stride=1),
           torch.nn.MaxPool2d(3, stride=2),
@@ -125,6 +138,7 @@ net = torch.nn.Sequential(
 
 if use_cuda:
     net.cuda()
+    print("using cuda!")
 
 print(summary(net,(3,12,12)))
 
@@ -132,11 +146,19 @@ loss_fn = torch.nn.CrossEntropyLoss()
 optimizer = optim.Adam(net.parameters(),lr=LR)
 
 # TRAIN
+# optimizer = optim.SGD(net.parameters(), lr=0.001)
+
 loss_train_arr = []
 loss_val_arr = []
 print("{0:15} {1:20} {2:20}".format('EPOCHS','Train loss','Test loss'))
 fig = plt.figure()
+
 for ep_n, epoch in enumerate(range(EPOCHS)):
+    #if ((epoch % 100) == 0):
+    #  print(LR)
+    #  LR = LR / 2
+    #  optimizer = optim.Adam(net.parameters(),lr=LR)
+
     running_loss = 0
     # run on train set
     for data in train_loader:
@@ -168,23 +190,66 @@ for ep_n, epoch in enumerate(range(EPOCHS)):
     loss_train_arr.append(running_loss/len(train_loader))
     print("{0:3d} {1:20f} {2:20f} ".format(ep_n, running_loss/len(train_loader),loss_val.cpu().data.numpy() ))
 
-    plt.cla()
-    plt.plot(loss_val_arr, linewidth=3)
-    plt.plot(loss_train_arr, linewidth=3)
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
-    plt.legend(['test', 'train'], loc='upper right')
-    plt.pause(0.01)
+    #plt.cla()
+    #plt.plot(loss_val_arr, linewidth=3)
+    #plt.plot(loss_train_arr, linewidth=3)
+    #plt.ylabel('loss')
+    #plt.xlabel('epoch')
+    #plt.legend(['test', 'train'], loc='upper right')
+    #plt.pause(0.01)
 
 _, predicted = torch.max(y_val.data.cpu(), 1)
 print('Network accuracy %d %%' % (100 * torch.sum(y_val_target.data.cpu() == predicted) / len(y_val)))
 
+
+plt.cla()
+plt.plot(loss_val_arr, linewidth=3)
+plt.plot(loss_train_arr, linewidth=3)
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['test', 'train'], loc='upper right')
+    
 fig.savefig("q1.png")
 # save model
-torch.save(net, "12net.pth")
 
+torch.save(net, "12net_v2.pth")
+modelPath = data_main + "/12net_v2.pth"
+torch.save(net,modelPath )
 
+modelPath = data_main + "/12net.pth"
+torch.save(net,modelPath)
+modelPath = data_main + "/12net_v2.pth"
+torch.save(net,modelPath )
 
+nSamples = len(X_train_aflw)
+sampleID = np.random.randint(nSamples)
 
+# create figure
+fig = plt.figure(figsize=(12, 24))
 
+# show face image and net's output
+ax = fig.add_subplot(1, 2, 1, xticks=[], yticks=[])
+curImgCuda = torch.Tensor(X_train_aflw[sampleID]).float().cuda()#X_test[sampleID]
+img = np.moveaxis(curImgCuda.cpu().data.numpy(), 0, -1)
+ax.imshow(img)
+# evaluate image
+y_val = net(curImgCuda.unsqueeze_(0))
+if y_val[0][0] > y_val[0][1]:
+  imgClass = "face"
+else:
+  imgClass = "not a face"
+ax.set_title(imgClass)
+
+# show BG image and net's output
+ax = fig.add_subplot(1, 2, 2, xticks=[], yticks=[])
+curImgCuda = torch.Tensor(X_train_pascal[sampleID]).float().cuda()
+img = np.moveaxis(curImgCuda.cpu().data.numpy(), 0, -1)
+ax.imshow(img)
+# evaluate image
+y_val = net(curImgCuda.unsqueeze_(0))
+if y_val[0][0] > y_val[0][1]:
+  imgClass = "face"
+else:
+  imgClass = "not a face"
+ax.set_title(imgClass)
 
