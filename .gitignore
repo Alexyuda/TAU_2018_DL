@@ -1,0 +1,9 @@
+VideoPose3D/checkpoint/
+VideoPose3D/data/data_2d_h36m_gt.npz
+VideoPose3D/data/
+VideoPose3D/common/__pycache__/arguments.cpython-35.pyc
+VideoPose3D/common/__pycache__/
+.idea/
+*.mp4
+VideoPose3D/common/__init__.py
+VideoPose3D/__init__.py
