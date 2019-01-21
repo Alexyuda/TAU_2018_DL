@@ -1,17 +1,22 @@
 import matplotlib
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 
-def scatter_3d_points(keypoints,skeleton = []):
-    parents = skeleton.parents()
-
+def scatter_3d_points(keypoints,skeleton):
     matplotlib.pyplot.switch_backend('TKAgg')
+
+    try:
+         parents = skeleton.parents()
+    except:
+        parents = []
+
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     for n, value in enumerate(keypoints):
         [x,y,z] = value
         ax.scatter(x, y, z, c = 'b', marker='o')
-        ax.text(x,y,z, '%s' % (str(n)), size=10, zorder=1, color='k')
+        ax.text(x,y,z, str(n), size=10, zorder=1, color='k')
 
     for j, j_parent in enumerate(parents):
         if j_parent == -1:
