@@ -358,7 +358,7 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
             x = x.view(x.shape[0], -1, self.num_joints_out, self.in_features)
 
             assert(attention.shape[0] == x.shape[0])
-            x[:, :, :, 2] = x[:, :, :, 2] * attention
+            x[:, :, :, 2] = x[:, :, :, 2].clone() * attention
             x = x.view(x.shape[0], x.shape[1], -1)
             x = x.permute(0, 2, 1)
 
