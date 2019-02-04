@@ -1,9 +1,14 @@
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from skeleton import Skeleton
 
+h36m_skeleton = Skeleton(parents=[-1,  0,  1,  2,  3,  4,  0,  6,  7,  8,  9,  0, 11, 12, 13, 14, 12,
+       16, 17, 18, 19, 20, 19, 22, 12, 24, 25, 26, 27, 28, 27, 30],
+       joints_left=[6, 7, 8, 9, 10, 16, 17, 18, 19, 20, 21, 22, 23],
+       joints_right=[1, 2, 3, 4, 5, 24, 25, 26, 27, 28, 29, 30, 31])
 
-def scatter_3d_points(keypoints,skeleton):
+def scatter_3d_points(keypoints,skeleton = h36m_skeleton):
     matplotlib.pyplot.switch_backend('TKAgg')
 
     try:

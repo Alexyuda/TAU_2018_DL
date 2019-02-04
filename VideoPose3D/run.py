@@ -160,15 +160,29 @@ cameras_valid, poses_valid, poses_valid_2d = fetch(subjects_test, action_filter)
 filter_widths = [int(x) for x in args.architecture.split(',')]
 if not args.disable_optimizations and not args.dense and args.stride == 1:
     # Use optimized model for single-frame predictions
-    model_pos_train = TemporalModelOptimized1f(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
+    if args.attention:
+        model_pos_train = TemporalModelOptimized1fAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+                                filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
+    else:
+        model_pos_train = TemporalModelOptimized1f(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
 else:
     # When incompatible settings are detected (stride > 1, dense filters, or disabled optimization) fall back to normal model
-    model_pos_train = TemporalModel(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
+    if args.attention:
+        model_pos_train = TemporalModelAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
                                 dense=args.dense)
-    
-model_pos = TemporalModel(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
+    else:
+        model_pos_train = TemporalModel(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
+                                filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
+                                dense=args.dense)
+
+if args.attention:
+    model_pos = TemporalModelAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+                            filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
+                            dense=args.dense)
+else:
+    model_pos = TemporalModel(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
                             filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
                             dense=args.dense)
 
