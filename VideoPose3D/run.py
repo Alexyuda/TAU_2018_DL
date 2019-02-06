@@ -409,6 +409,8 @@ if not args.evaluate:
                 loss_total.backward()
 
                 optimizer.step()
+                # TODO remove break!
+                break
 
         losses_3d_train.append(epoch_loss_3d_train / N)
 

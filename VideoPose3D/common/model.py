@@ -14,7 +14,7 @@ class TemporalModelBase(nn.Module):
     """
     
     def __init__(self, num_joints_in, in_features, num_joints_out,
-                 filter_widths, causal, dropout, channels, channels_attention = 128):
+                 filter_widths, causal, dropout, channels):
         super().__init__()
         
         # Validate input
@@ -31,7 +31,6 @@ class TemporalModelBase(nn.Module):
         
         self.pad = [ filter_widths[0] // 2 ]
         self.expand_bn = nn.BatchNorm1d(channels, momentum=0.1)
-        self.expand_bn_attention = nn.BatchNorm1d(channels_attention, momentum=0.1)
         self.shrink = nn.Conv1d(channels, num_joints_out*3, 1)
 
     def set_bn_momentum(self, momentum):
@@ -165,7 +164,7 @@ class TemporalModelOptimized1f(TemporalModelBase):
         channels -- number of convolution channels
         """
         super().__init__(num_joints_in, in_features, num_joints_out, filter_widths, causal, dropout, channels)
-        
+
         self.expand_conv = nn.Conv1d(num_joints_in*in_features, channels, filter_widths[0], stride=filter_widths[0], bias=False)
         
         layers_conv = []
@@ -206,7 +205,7 @@ class TemporalModelAt(TemporalModelBase):
         """
 
         def __init__(self, num_joints_in, in_features, num_joints_out,
-                     filter_widths, causal=False, dropout=0.25, channels=1024, dense=False):
+                     filter_widths, causal=False, dropout=0.25, channels=1024,channels_attention = 128,dense=False):
             """
             Initialize this model.
 
@@ -222,10 +221,15 @@ class TemporalModelAt(TemporalModelBase):
             """
             super().__init__(num_joints_in, in_features, num_joints_out, filter_widths, causal, dropout, channels)
 
+            self.expand_bn_attention = nn.BatchNorm1d(channels_attention, momentum=0.1)
+
             self.expand_conv = nn.Conv1d(num_joints_in * in_features, channels, filter_widths[0], bias=False)
+            self.expand_conv_attention = nn.Conv1d(num_joints_in * in_features, channels_attention, filter_widths[0], bias=False)
 
             layers_conv = []
+            layers_conv_attention = []
             layers_bn = []
+            layers_bn_attention = []
 
             self.causal_shift = [(filter_widths[0]) // 2 if causal else 0]
             next_dilation = filter_widths[0]
@@ -237,16 +241,62 @@ class TemporalModelAt(TemporalModelBase):
                                              filter_widths[i] if not dense else (2 * self.pad[-1] + 1),
                                              dilation=next_dilation if not dense else 1,
                                              bias=False))
+                layers_conv_attention.append(nn.Conv1d(channels_attention, channels_attention,
+                                             filter_widths[i] if not dense else (2 * self.pad[-1] + 1),
+                                             dilation=next_dilation if not dense else 1,
+                                             bias=False))
+
                 layers_bn.append(nn.BatchNorm1d(channels, momentum=0.1))
+                layers_bn_attention.append(nn.BatchNorm1d(channels_attention, momentum=0.1))
+
                 layers_conv.append(nn.Conv1d(channels, channels, 1, dilation=1, bias=False))
+                layers_conv_attention.append(nn.Conv1d(channels_attention, channels_attention, 1, dilation=1, bias=False))
+
                 layers_bn.append(nn.BatchNorm1d(channels, momentum=0.1))
+                layers_bn_attention.append(nn.BatchNorm1d(channels_attention, momentum=0.1))
 
                 next_dilation *= filter_widths[i]
 
             self.layers_conv = nn.ModuleList(layers_conv)
+            self.layers_conv_attention = nn.ModuleList(layers_conv_attention)
+
             self.layers_bn = nn.ModuleList(layers_bn)
+            self.layers_bn_attention = nn.ModuleList(layers_bn_attention)
+
+            self.shrink_attention = nn.Conv1d(channels_attention, self.receptive_field(), 1)
+            self.sigmoid = nn.Sigmoid()
+
+        def _forward_attention(self, x):
+            x = self.drop(self.relu(self.expand_bn_attention(self.expand_conv_attention(x))))
+
+            for i in range(len(self.pad) - 1):
+                pad = self.pad[i + 1]
+                shift = self.causal_shift[i + 1]
+                res = x[:, :, pad + shift: x.shape[2] - pad + shift]
+
+                x = self.drop(self.relu(self.layers_bn_attention[2 * i](self.layers_conv_attention[2 * i](x))))
+                x = res + self.drop(self.relu(self.layers_bn_attention[2 * i + 1](self.layers_conv_attention[2 * i + 1](x))))
+
+            x = self.shrink_attention(x)
+            x = self.sigmoid(x)
+            return x
 
         def _forward_blocks(self, x):
+
+            if x.shape[-2] != self.in_features * self.num_joints_in:
+                x = x.permute(0, 2, 1)
+                x = x.view(x.shape[0], -1, self.num_joints_out, self.in_features-1)
+                attention_dummy = torch.ones([x.shape[0], x.shape[1], x.shape[2], 1])
+                if torch.cuda.is_available():
+                    attention_dummy = attention_dummy.cuda()
+                x = torch.cat((x, attention_dummy), 3)
+                x = x.view(x.shape[0], x.shape[1], -1)
+                x = x.permute(0, 2, 1)
+
+            attention = self._forward_attention(x)
+            x = x.permute(0, 2, 1)
+            x = x.view(x.shape[0], -1, self.num_joints_out, self.in_features)
+
             x = self.drop(self.relu(self.expand_bn(self.expand_conv(x))))
 
             for i in range(len(self.pad) - 1):
@@ -286,7 +336,9 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
             dropout -- dropout probability
             channels -- number of convolution channels
             """
-            super().__init__(num_joints_in, in_features, num_joints_out, filter_widths, causal, dropout, channels, channels_attention)
+            super().__init__(num_joints_in, in_features, num_joints_out, filter_widths, causal, dropout, channels)
+
+            self.expand_bn_attention = nn.BatchNorm1d(channels_attention, momentum=0.1)
 
             self.expand_conv = nn.Conv1d(num_joints_in * in_features, channels, filter_widths[0],
                                          stride=filter_widths[0], bias=False)
@@ -343,13 +395,13 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
 
         def _forward_blocks(self, x):
 
-            if x.shape[-1] != self.in_features:
+            if x.shape[-2] != self.in_features * self.num_joints_in:
                 x = x.permute(0, 2, 1)
                 x = x.view(x.shape[0], -1, self.num_joints_out, self.in_features-1)
-                attention_dummpy = torch.ones([x.shape[0], x.shape[1], x.shape[2], 1])
+                attention_dummy = torch.ones([x.shape[0], x.shape[1], x.shape[2], 1])
                 if torch.cuda.is_available():
-                    attention_dummpy = attention_dummpy.cuda()
-                x = torch.cat((x, attention_dummpy), 3)
+                    attention_dummy = attention_dummy.cuda()
+                x = torch.cat((x, attention_dummy), 3)
                 x = x.view(x.shape[0], x.shape[1], -1)
                 x = x.permute(0, 2, 1)
 
