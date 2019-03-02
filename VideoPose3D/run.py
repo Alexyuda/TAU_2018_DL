@@ -27,6 +27,8 @@ from common.utils import deterministic_random
 args = parse_args()
 print(args)
 
+useChunckedGenOnly = True
+
 try:
     # Create checkpoint directory if it does not exist
     os.makedirs(args.checkpoint)
@@ -158,33 +160,45 @@ if action_filter is not None:
 cameras_valid, poses_valid, poses_valid_2d = fetch(subjects_test, action_filter)
 
 filter_widths = [int(x) for x in args.architecture.split(',')]
-if not args.disable_optimizations and not args.dense and args.stride == 1:
-    # Use optimized model for single-frame predictions
-    if args.attention:
-        model_pos_train = TemporalModelOptimized1fAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
-                                filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
-    else:
-        model_pos_train = TemporalModelOptimized1f(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
-                                filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
-else:
-    # When incompatible settings are detected (stride > 1, dense filters, or disabled optimization) fall back to normal model
-    if args.attention:
-        model_pos_train = TemporalModelAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
-                                filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
-                                dense=args.dense)
-    else:
-        model_pos_train = TemporalModel(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
-                                filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
-                                dense=args.dense)
 
 if args.attention:
-    model_pos = TemporalModelAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
-                            filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
-                            dense=args.dense)
+    model_pos_train = TemporalModelOptimized1fAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+                                filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
+    model_pos = TemporalModelOptimized1fAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+                                filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
 else:
-    model_pos = TemporalModel(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
-                            filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
-                            dense=args.dense)
+    model_pos_train = TemporalModelOptimized1f(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+                                filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
+    model_pos = TemporalModelOptimized1(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+                                filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
+
+# if not args.disable_optimizations and not args.dense and args.stride == 1:
+#     # Use optimized model for single-frame predictions
+#     if args.attention:
+#         model_pos_train = TemporalModelOptimized1fAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+#                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
+#     else:
+#         model_pos_train = TemporalModelOptimized1f(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
+#                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
+# else:
+#     # When incompatible settings are detected (stride > 1, dense filters, or disabled optimization) fall back to normal model
+#     if args.attention:
+#         model_pos_train = TemporalModelAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+#                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
+#                                 dense=args.dense)
+#     else:
+#         model_pos_train = TemporalModel(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
+#                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
+#                                 dense=args.dense)
+#
+# if args.attention:
+#     model_pos = TemporalModelAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+#                             filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
+#                             dense=args.dense)
+# else:
+#     model_pos = TemporalModel(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
+#                             filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
+#                             dense=args.dense)
 
 receptive_field = model_pos.receptive_field()
 print('INFO: Receptive field: {} frames'.format(receptive_field))
@@ -211,10 +225,18 @@ if args.resume or args.evaluate:
     print('This model was trained for {} epochs'.format(checkpoint['epoch']))
     model_pos_train.load_state_dict(checkpoint['model_pos'])
     model_pos.load_state_dict(checkpoint['model_pos'])
-    
-test_generator = UnchunkedGenerator(cameras_valid, poses_valid, poses_valid_2d,
+
+if useChunckedGenOnly:
+    test_generator = ChunkedGenerator(args.batch_size//args.stride, cameras_valid, poses_valid, poses_valid_2d, args.stride,
+                                       pad=pad, causal_shift=causal_shift, shuffle=True, augment=False,
+                                       kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
+else:
+    test_generator = UnchunkedGenerator(cameras_valid, poses_valid, poses_valid_2d,
                                     pad=pad, causal_shift=causal_shift, augment=False,
                                     kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
+
+
+
 print('INFO: Testing on {} frames'.format(test_generator.num_frames()))
 
 if not args.evaluate:
@@ -268,8 +290,16 @@ if not args.evaluate:
     train_generator = ChunkedGenerator(args.batch_size//args.stride, cameras_train, poses_train, poses_train_2d, args.stride,
                                        pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.data_augmentation,
                                        kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
-    train_generator_eval = UnchunkedGenerator(cameras_train, poses_train, poses_train_2d,
+    if useChunckedGenOnly:
+        train_generator_eval = ChunkedGenerator(args.batch_size//args.stride, cameras_train, poses_train, poses_train_2d, args.stride,
+                                       pad=pad, causal_shift=causal_shift, shuffle=True, augment=False,
+                                       kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
+    else:
+        train_generator_eval = UnchunkedGenerator(cameras_train, poses_train, poses_train_2d,
                                               pad=pad, causal_shift=causal_shift, augment=False)
+
+
+
     print('INFO: Training on {} frames'.format(train_generator_eval.num_frames()))
     if semi_supervised:
         semi_generator = ChunkedGenerator(args.batch_size//args.stride, cameras_semi, None, poses_semi_2d, args.stride,
@@ -410,7 +440,7 @@ if not args.evaluate:
 
                 optimizer.step()
                 # TODO remove break!
-                break
+                # break
 
         losses_3d_train.append(epoch_loss_3d_train / N)
 
@@ -716,8 +746,15 @@ if args.render:
     else:
         ground_truth = None
         print('INFO: this action is unlabeled. Ground truth will not be rendered.')
-        
-    gen = UnchunkedGenerator(None, None, [input_keypoints],
+
+    if useChunckedGenOnly:
+        gen = ChunkedGenerator(args.batch_size // args.stride, None, None,
+                               [input_keypoints], args.stride,
+                               pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.test_time_augmentation,
+                               kps_left=kps_left, kps_right=kps_right, joints_left=joints_left,
+                               joints_right=joints_right)
+    else:
+        gen = UnchunkedGenerator(None, None, [input_keypoints],
                              pad=pad, causal_shift=causal_shift, augment=args.test_time_augmentation,
                              kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
     prediction = evaluate(gen, return_predictions=True)
@@ -815,9 +852,17 @@ else:
                     continue
 
             poses_act, poses_2d_act = fetch_actions(actions[action_key])
-            gen = UnchunkedGenerator(None, poses_act, poses_2d_act,
+            if useChunckedGenOnly:
+                gen = ChunkedGenerator(args.batch_size // args.stride, None, poses_act,
+                                                    poses_2d_act, args.stride,
+                                                  pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.test_time_augmentation,
+                                                  kps_left=kps_left, kps_right=kps_right, joints_left=joints_left,
+                                                  joints_right=joints_right)
+            else:
+                gen = UnchunkedGenerator(None, poses_act, poses_2d_act,
                                      pad=pad, causal_shift=causal_shift, augment=args.test_time_augmentation,
                                      kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
+
             e1, e2, e3, ev = evaluate(gen, action_key)
             errors_p1.append(e1)
             errors_p2.append(e2)
