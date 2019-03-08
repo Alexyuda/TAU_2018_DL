@@ -167,9 +167,9 @@ if args.attention:
     model_pos = TemporalModelOptimized1fAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
 else:
-    model_pos_train = TemporalModelOptimized1f(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+    model_pos_train = TemporalModelOptimized1f(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
-    model_pos = TemporalModelOptimized1(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
+    model_pos = TemporalModelOptimized1f(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
 
 # if not args.disable_optimizations and not args.dense and args.stride == 1:
@@ -694,7 +694,8 @@ def evaluate(test_generator, action=None, return_predictions=False):
                 predicted_3d_pos[1, :, :, 0] *= -1
                 predicted_3d_pos[1, :, joints_left + joints_right] = predicted_3d_pos[1, :, joints_right + joints_left]
                 predicted_3d_pos = torch.mean(predicted_3d_pos, dim=0, keepdim=True)
-                
+
+
             if return_predictions:
                 return predicted_3d_pos.squeeze(0).cpu().numpy()
                 
@@ -702,8 +703,8 @@ def evaluate(test_generator, action=None, return_predictions=False):
             if torch.cuda.is_available():
                 inputs_3d = inputs_3d.cuda()
             inputs_3d[:, :, 0] = 0    
-            if test_generator.augment_enabled():
-                inputs_3d = inputs_3d[:1]
+            # if test_generator.augment_enabled():
+                # inputs_3d = inputs_3d[:1]
 
             error = mpjpe(predicted_3d_pos, inputs_3d)
             epoch_loss_3d_pos_scale += inputs_3d.shape[0]*inputs_3d.shape[1] * n_mpjpe(predicted_3d_pos, inputs_3d).item()
@@ -853,14 +854,22 @@ else:
 
             poses_act, poses_2d_act = fetch_actions(actions[action_key])
             if useChunckedGenOnly:
+                # gen = ChunkedGenerator(args.batch_size // args.stride, None, poses_act,
+                #                                     poses_2d_act, args.stride,
+                #                                   pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.test_time_augmentation,
+                #                                   kps_left=kps_left, kps_right=kps_right, joints_left=joints_left,
+                #                                   joints_right=joints_right)
                 gen = ChunkedGenerator(args.batch_size // args.stride, None, poses_act,
                                                     poses_2d_act, args.stride,
-                                                  pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.test_time_augmentation,
+                                                  pad=pad, causal_shift=causal_shift, shuffle=True, augment=False,
                                                   kps_left=kps_left, kps_right=kps_right, joints_left=joints_left,
                                                   joints_right=joints_right)
             else:
+                # gen = UnchunkedGenerator(None, poses_act, poses_2d_act,
+                #                      pad=pad, causal_shift=causal_shift, augment=args.test_time_augmentation,
+                #                      kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
                 gen = UnchunkedGenerator(None, poses_act, poses_2d_act,
-                                     pad=pad, causal_shift=causal_shift, augment=args.test_time_augmentation,
+                                     pad=pad, causal_shift=causal_shift, augment=False,
                                      kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
 
             e1, e2, e3, ev = evaluate(gen, action_key)
