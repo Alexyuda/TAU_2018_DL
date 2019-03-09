@@ -686,14 +686,24 @@ def evaluate(test_generator, action=None, return_predictions=False):
                 inputs_2d = inputs_2d.cuda()
 
             # Positional model
-            predicted_3d_pos = model_pos(inputs_2d)
+                predicted_3d_pos = model_pos(inputs_2d)
 
             # Test-time augmentation (if enabled)
             if test_generator.augment_enabled():
                 # Undo flipping and take average with non-flipped version
-                predicted_3d_pos[1, :, :, 0] *= -1
-                predicted_3d_pos[1, :, joints_left + joints_right] = predicted_3d_pos[1, :, joints_right + joints_left]
-                predicted_3d_pos = torch.mean(predicted_3d_pos, dim=0, keepdim=True)
+                inputs_2d_flip = inputs_2d.clone()
+                inputs_2d_flip[:,:,:, 0] *= -1
+                inputs_2d_flip[:, :, kps_left + kps_right] = inputs_2d_flip[:, :, kps_right + kps_left]
+
+                predicted_3d_pos_flip = model_pos(inputs_2d_flip)
+                predicted_3d_pos_flip[:, :, :, 0] *= -1
+                predicted_3d_pos_flip[:, :, joints_left + joints_right] = predicted_3d_pos_flip[:, :, joints_right + joints_left]
+                predicted_3d_pos = (predicted_3d_pos_flip + predicted_3d_pos)/2
+
+                # Undo flipping and take average with non-flipped version
+                #predicted_3d_pos[1, :, :, 0] *= -1
+                #predicted_3d_pos[1, :, joints_left + joints_right] = predicted_3d_pos[1, :, joints_right + joints_left]
+                #predicted_3d_pos = torch.mean(predicted_3d_pos, dim=0, keepdim=True)
 
 
             if return_predictions:
@@ -854,20 +864,12 @@ else:
 
             poses_act, poses_2d_act = fetch_actions(actions[action_key])
             if useChunckedGenOnly:
-                # gen = ChunkedGenerator(args.batch_size // args.stride, None, poses_act,
-                #                                     poses_2d_act, args.stride,
-                #                                   pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.test_time_augmentation,
-                #                                   kps_left=kps_left, kps_right=kps_right, joints_left=joints_left,
-                #                                   joints_right=joints_right)
                 gen = ChunkedGenerator(args.batch_size // args.stride, None, poses_act,
                                                     poses_2d_act, args.stride,
-                                                  pad=pad, causal_shift=causal_shift, shuffle=True, augment=False,
+                                                  pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.test_time_augmentation,
                                                   kps_left=kps_left, kps_right=kps_right, joints_left=joints_left,
                                                   joints_right=joints_right)
             else:
-                # gen = UnchunkedGenerator(None, poses_act, poses_2d_act,
-                #                      pad=pad, causal_shift=causal_shift, augment=args.test_time_augmentation,
-                #                      kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
                 gen = UnchunkedGenerator(None, poses_act, poses_2d_act,
                                      pad=pad, causal_shift=causal_shift, augment=False,
                                      kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
