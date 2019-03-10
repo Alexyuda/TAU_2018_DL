@@ -27,7 +27,7 @@ from common.utils import deterministic_random
 args = parse_args()
 print(args)
 
-useChunckedGenOnly = True
+
 
 try:
     # Create checkpoint directory if it does not exist
@@ -172,34 +172,6 @@ else:
     model_pos = TemporalModelOptimized1f(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
 
-# if not args.disable_optimizations and not args.dense and args.stride == 1:
-#     # Use optimized model for single-frame predictions
-#     if args.attention:
-#         model_pos_train = TemporalModelOptimized1fAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
-#                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
-#     else:
-#         model_pos_train = TemporalModelOptimized1f(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
-#                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels)
-# else:
-#     # When incompatible settings are detected (stride > 1, dense filters, or disabled optimization) fall back to normal model
-#     if args.attention:
-#         model_pos_train = TemporalModelAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
-#                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
-#                                 dense=args.dense)
-#     else:
-#         model_pos_train = TemporalModel(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
-#                                 filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
-#                                 dense=args.dense)
-#
-# if args.attention:
-#     model_pos = TemporalModelAt(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1]+1, poses_valid[0].shape[-2],
-#                             filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
-#                             dense=args.dense)
-# else:
-#     model_pos = TemporalModel(poses_valid_2d[0].shape[-2], poses_valid_2d[0].shape[-1], poses_valid[0].shape[-2],
-#                             filter_widths=filter_widths, causal=args.causal, dropout=args.dropout, channels=args.channels,
-#                             dense=args.dense)
-
 receptive_field = model_pos.receptive_field()
 print('INFO: Receptive field: {} frames'.format(receptive_field))
 pad = (receptive_field - 1) // 2 # Padding on each side
@@ -226,14 +198,10 @@ if args.resume or args.evaluate:
     model_pos_train.load_state_dict(checkpoint['model_pos'])
     model_pos.load_state_dict(checkpoint['model_pos'])
 
-if useChunckedGenOnly:
-    test_generator = ChunkedGenerator(args.batch_size//args.stride, cameras_valid, poses_valid, poses_valid_2d, args.stride,
-                                       pad=pad, causal_shift=causal_shift, shuffle=True, augment=False,
-                                       kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
-else:
-    test_generator = UnchunkedGenerator(cameras_valid, poses_valid, poses_valid_2d,
-                                    pad=pad, causal_shift=causal_shift, augment=False,
-                                    kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
+
+test_generator = ChunkedGenerator(args.batch_size//args.stride, cameras_valid, poses_valid, poses_valid_2d, args.stride,
+                                   pad=pad, causal_shift=causal_shift, shuffle=True, augment=False,
+                                   kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
 
 
 
@@ -290,15 +258,10 @@ if not args.evaluate:
     train_generator = ChunkedGenerator(args.batch_size//args.stride, cameras_train, poses_train, poses_train_2d, args.stride,
                                        pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.data_augmentation,
                                        kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
-    if useChunckedGenOnly:
-        train_generator_eval = ChunkedGenerator(args.batch_size//args.stride, cameras_train, poses_train, poses_train_2d, args.stride,
-                                       pad=pad, causal_shift=causal_shift, shuffle=True, augment=False,
-                                       kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
-    else:
-        train_generator_eval = UnchunkedGenerator(cameras_train, poses_train, poses_train_2d,
-                                              pad=pad, causal_shift=causal_shift, augment=False)
 
-
+    train_generator_eval = ChunkedGenerator(args.batch_size//args.stride, cameras_train, poses_train, poses_train_2d, args.stride,
+                                   pad=pad, causal_shift=causal_shift, shuffle=True, augment=False,
+                                   kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
 
     print('INFO: Training on {} frames'.format(train_generator_eval.num_frames()))
     if semi_supervised:
@@ -439,8 +402,6 @@ if not args.evaluate:
                 loss_total.backward()
 
                 optimizer.step()
-                # TODO remove break!
-                # break
 
         losses_3d_train.append(epoch_loss_3d_train / N)
 
@@ -700,11 +661,6 @@ def evaluate(test_generator, action=None, return_predictions=False):
                 predicted_3d_pos_flip[:, :, joints_left + joints_right] = predicted_3d_pos_flip[:, :, joints_right + joints_left]
                 predicted_3d_pos = (predicted_3d_pos_flip + predicted_3d_pos)/2
 
-                # Undo flipping and take average with non-flipped version
-                #predicted_3d_pos[1, :, :, 0] *= -1
-                #predicted_3d_pos[1, :, joints_left + joints_right] = predicted_3d_pos[1, :, joints_right + joints_left]
-                #predicted_3d_pos = torch.mean(predicted_3d_pos, dim=0, keepdim=True)
-
 
             if return_predictions:
                 return predicted_3d_pos.squeeze(0).cpu().numpy()
@@ -758,16 +714,12 @@ if args.render:
         ground_truth = None
         print('INFO: this action is unlabeled. Ground truth will not be rendered.')
 
-    if useChunckedGenOnly:
-        gen = ChunkedGenerator(args.batch_size // args.stride, None, None,
-                               [input_keypoints], args.stride,
-                               pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.test_time_augmentation,
-                               kps_left=kps_left, kps_right=kps_right, joints_left=joints_left,
-                               joints_right=joints_right)
-    else:
-        gen = UnchunkedGenerator(None, None, [input_keypoints],
-                             pad=pad, causal_shift=causal_shift, augment=args.test_time_augmentation,
-                             kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
+
+    gen = ChunkedGenerator(args.batch_size // args.stride, None, None,
+                           [input_keypoints], args.stride,
+                           pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.test_time_augmentation,
+                           kps_left=kps_left, kps_right=kps_right, joints_left=joints_left,
+                           joints_right=joints_right)
     prediction = evaluate(gen, return_predictions=True)
     
     if ground_truth is not None:
@@ -863,16 +815,13 @@ else:
                     continue
 
             poses_act, poses_2d_act = fetch_actions(actions[action_key])
-            if useChunckedGenOnly:
-                gen = ChunkedGenerator(args.batch_size // args.stride, None, poses_act,
-                                                    poses_2d_act, args.stride,
-                                                  pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.test_time_augmentation,
-                                                  kps_left=kps_left, kps_right=kps_right, joints_left=joints_left,
-                                                  joints_right=joints_right)
-            else:
-                gen = UnchunkedGenerator(None, poses_act, poses_2d_act,
-                                     pad=pad, causal_shift=causal_shift, augment=False,
-                                     kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
+
+            gen = ChunkedGenerator(args.batch_size // args.stride, None, poses_act,
+                                                poses_2d_act, args.stride,
+                                              pad=pad, causal_shift=causal_shift, shuffle=True, augment=args.test_time_augmentation,
+                                              kps_left=kps_left, kps_right=kps_right, joints_left=joints_left,
+                                              joints_right=joints_right)
+
 
             e1, e2, e3, ev = evaluate(gen, action_key)
             errors_p1.append(e1)
