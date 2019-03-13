@@ -12,6 +12,8 @@ def parse_args():
 
     # General arguments
     parser.add_argument('-at', '--attention', action="store_true" ,help='use attention block')
+    parser.add_argument('--warmup', default=0, type=int, metavar='N', help='warm-up epochs')
+    parser.add_argument('--aug--skels--p', default=0.1, type=float, dest='aug_skels_p', help='warm-up epochs for semi-supervision')
     parser.add_argument('-d', '--dataset', default='h36m', type=str, metavar='NAME', help='target dataset') # h36m or humaneva
     parser.add_argument('-k', '--keypoints', default='cpn_ft_h36m_dbb', type=str, metavar='NAME', help='2D detections to use')
     parser.add_argument('-str', '--subjects-train', default='S1,S5,S6,S7,S8', type=str, metavar='LIST',
@@ -50,7 +52,6 @@ def parse_args():
     # Experimental
     parser.add_argument('--subset', default=1, type=float, metavar='FRACTION', help='reduce dataset size by fraction')
     parser.add_argument('--downsample', default=1, type=int, metavar='FACTOR', help='downsample frame rate by factor (semi-supervised)')
-    parser.add_argument('--warmup', default=1, type=int, metavar='N', help='warm-up epochs for semi-supervision')
     parser.add_argument('--no-eval', action='store_true', help='disable epoch evaluation while training (small speed-up)')
     parser.add_argument('--dense', action='store_true', help='use dense convolutions instead of dilated convolutions')
     parser.add_argument('--disable-optimizations', action='store_true', help='disable optimized model for single-frame predictions')

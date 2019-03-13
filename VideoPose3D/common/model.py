@@ -60,7 +60,7 @@ class TemporalModelBase(nn.Module):
             next_dilation *= self.filter_widths[i]
         return frames
         
-    def forward(self, x):
+    def forward(self, x, epoch = 0, warmup = 0):
         assert len(x.shape) == 4
         assert x.shape[-2] == self.num_joints_in
         # assert x.shape[-1] == self.in_features
@@ -69,13 +69,13 @@ class TemporalModelBase(nn.Module):
         sz = x.shape[:3]
         x = x.view(x.shape[0], x.shape[1], -1)
         x = x.permute(0, 2, 1)
-        
-        x = self._forward_blocks(x)
-        
+
+        x, attention = self._forward_blocks(x,epoch = epoch,warmup = warmup)
+
         x = x.permute(0, 2, 1)
         x = x.view(sz[0], -1, self.num_joints_out, 3)
         
-        return x    
+        return x, attention
 
 # class TemporalModel(TemporalModelBase):
 #     """
@@ -185,7 +185,7 @@ class TemporalModelOptimized1f(TemporalModelBase):
         self.layers_conv = nn.ModuleList(layers_conv)
         self.layers_bn = nn.ModuleList(layers_bn)
         
-    def _forward_blocks(self, x):
+    def _forward_blocks(self, x, wormup = None):
         x = self.drop(self.relu(self.expand_bn(self.expand_conv(x))))
         
         for i in range(len(self.pad) - 1):
@@ -379,7 +379,7 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
             self.shrink_attention = nn.Conv1d(channels_attention, self.receptive_field(), 1)
             self.shrink_attention_output = nn.Conv1d(channels, num_joints_out*3, 1)
             self.sigmoid = nn.Sigmoid()
-            self.tanh = nn.Tanh()
+
 
         def _forward_attention(self, x):
 
@@ -392,11 +392,10 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
                 x = res + self.drop(self.relu(self.layers_bn_attention[2 * i + 1](self.layers_conv_attention[2 * i + 1](x))))
 
             x = self.shrink_attention(x)
-            # x = self.sigmoid(x)
-            x = self.tanh(x)
+            x = self.sigmoid(x)
             return x
 
-        def _forward_blocks(self, x):
+        def _forward_blocks(self, x, epoch , warmup):
 
             if x.shape[-2] != self.in_features * self.num_joints_in:
                 x = x.permute(0, 2, 1)
@@ -413,7 +412,8 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
             x = x.view(x.shape[0], -1, self.num_joints_out, self.in_features)
 
             assert(attention.shape[0] == x.shape[0])
-            x[:, :, :, 2] = x[:, :, :, 2].clone() * attention
+            if epoch>=warmup:
+                x[:, :, :, 2] = x[:, :, :, 2].clone() * attention
             x = x.view(x.shape[0], x.shape[1], -1)
             x = x.permute(0, 2, 1)
 
@@ -425,5 +425,5 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
                 x = self.drop(self.relu(self.layers_bn[2 * i](self.layers_conv[2 * i](x))))
                 x = res + self.drop(self.relu(self.layers_bn[2 * i + 1](self.layers_conv[2 * i + 1](x))))
 
-            x = self.shrink_attention_output(x)
-            return x
+            x = self.shrink(x)
+            return x, attention

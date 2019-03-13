@@ -393,7 +393,23 @@ if not args.evaluate:
                 optimizer.zero_grad()
 
                 # Predict 3D poses
-                predicted_3d_pos = model_pos_train(inputs_2d)
+                if args.attention:
+                    if epoch < args.warmup:
+                        for name, param in model_pos_train.named_parameters():
+                            if 'attention' in name:
+                                param.requires_grad = False
+                    else:
+                        for name, param in model_pos_train.named_parameters():
+                            if 'attention' in name:
+                                param.requires_grad = True
+                        if args.aug_skels_p:
+                            xxx=777
+                            # inputs_2d = inputs_2d
+
+                    predicted_3d_pos, attention = model_pos_train(inputs_2d, epoch=epoch, warmup=args.warmup)
+                else:
+                    predicted_3d_pos = model_pos_train(inputs_2d)
+
                 loss_3d_pos = mpjpe(predicted_3d_pos, inputs_3d)
                 epoch_loss_3d_train += inputs_3d.shape[0]*inputs_3d.shape[1] * loss_3d_pos.item()
                 N += inputs_3d.shape[0]*inputs_3d.shape[1]
@@ -430,7 +446,11 @@ if not args.evaluate:
                     inputs_3d[:, :, 0] = 0
 
                     # Predict 3D poses
-                    predicted_3d_pos = model_pos(inputs_2d)
+                    if args.attention:
+                        predicted_3d_pos, attention = model_pos_train(inputs_2d, epoch=epoch, warmup=args.warmup)
+                    else:
+                        predicted_3d_pos = model_pos_train(inputs_2d)
+
                     loss_3d_pos = mpjpe(predicted_3d_pos, inputs_3d)
                     epoch_loss_3d_valid += inputs_3d.shape[0]*inputs_3d.shape[1] * loss_3d_pos.item()
                     N += inputs_3d.shape[0]*inputs_3d.shape[1]
@@ -479,7 +499,11 @@ if not args.evaluate:
                     inputs_3d[:, :, 0] = 0
 
                     # Compute 3D poses
-                    predicted_3d_pos = model_pos(inputs_2d)
+                    if args.attention:
+                        predicted_3d_pos, attention = model_pos(inputs_2d,epoch=epoch, warmup=args.warmup)
+                    else:
+                        predicted_3d_pos = model_pos(inputs_2d)
+
                     loss_3d_pos = mpjpe(predicted_3d_pos, inputs_3d)
                     epoch_loss_3d_train_eval += inputs_3d.shape[0]*inputs_3d.shape[1] * loss_3d_pos.item()
                     N += inputs_3d.shape[0]*inputs_3d.shape[1]
@@ -647,7 +671,10 @@ def evaluate(test_generator, action=None, return_predictions=False):
                 inputs_2d = inputs_2d.cuda()
 
             # Positional model
-                predicted_3d_pos = model_pos(inputs_2d)
+                if args.attention:
+                    predicted_3d_pos, attention = model_pos(inputs_2d, epoch=epoch, warmup=args.warmup)
+                else:
+                    predicted_3d_pos = model_pos(inputs_2d)
 
             # Test-time augmentation (if enabled)
             if test_generator.augment_enabled():
