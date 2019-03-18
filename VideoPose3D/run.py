@@ -21,6 +21,7 @@ from common.camera import *
 from common.model import *
 from common.loss import *
 from common.generators import ChunkedGenerator, UnchunkedGenerator
+from common.augment_skels import *
 from time import time
 from common.utils import deterministic_random
 
@@ -402,10 +403,8 @@ if not args.evaluate:
                         for name, param in model_pos_train.named_parameters():
                             if 'attention' in name:
                                 param.requires_grad = True
-                        if args.aug_skels_p:
-                            xxx=777
-                            # inputs_2d = inputs_2d
 
+                    inputs_2d, augment_skels_ind = augment_skels(inputs_2d,args.aug_skels_train_p)
                     predicted_3d_pos, attention = model_pos_train(inputs_2d, epoch=epoch, warmup=args.warmup)
                 else:
                     predicted_3d_pos = model_pos_train(inputs_2d)
@@ -870,3 +869,5 @@ else:
             print('Evaluating on subject', subject)
             run_evaluation(all_actions_by_subject[subject], action_filter)
             print('')
+
+
