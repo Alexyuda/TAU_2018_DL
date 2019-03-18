@@ -682,11 +682,13 @@ def evaluate(test_generator, action=None, return_predictions=False):
                 inputs_2d_flip = inputs_2d.clone()
                 inputs_2d_flip[:,:,:, 0] *= -1
                 inputs_2d_flip[:, :, kps_left + kps_right] = inputs_2d_flip[:, :, kps_right + kps_left]
-
-                predicted_3d_pos_flip = model_pos(inputs_2d_flip)
-                predicted_3d_pos_flip[:, :, :, 0] *= -1
-                predicted_3d_pos_flip[:, :, joints_left + joints_right] = predicted_3d_pos_flip[:, :, joints_right + joints_left]
-                predicted_3d_pos = (predicted_3d_pos_flip + predicted_3d_pos)/2
+                if  args.attention:
+                    predicted_3d_pos_flip, attention = model_pos(inputs_2d_flip,epoch=epoch, warmup=args.warmup)
+                else:
+                    predicted_3d_pos_flip = model_pos(inputs_2d_flip)
+                    predicted_3d_pos_flip[:, :, :, 0] *= -1
+                    predicted_3d_pos_flip[:, :, joints_left + joints_right] = predicted_3d_pos_flip[:, :, joints_right + joints_left]
+                    predicted_3d_pos = (predicted_3d_pos_flip + predicted_3d_pos)/2
 
 
             if return_predictions:

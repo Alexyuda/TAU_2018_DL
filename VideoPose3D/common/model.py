@@ -378,8 +378,8 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
 
             self.shrink_attention = nn.Conv1d(channels_attention, self.receptive_field(), 1)
             self.shrink_attention_output = nn.Conv1d(channels, num_joints_out*3, 1)
-            self.sigmoid = nn.Sigmoid()
-
+            # self.sigmoid = nn.Sigmoid()
+            self.tanh = nn.Tanh()
 
         def _forward_attention(self, x):
 
@@ -392,7 +392,8 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
                 x = res + self.drop(self.relu(self.layers_bn_attention[2 * i + 1](self.layers_conv_attention[2 * i + 1](x))))
 
             x = self.shrink_attention(x)
-            x = self.sigmoid(x)
+            # x = self.sigmoid(x)
+            x = self.tanh(x)
             return x
 
         def _forward_blocks(self, x, epoch , warmup):
@@ -400,7 +401,10 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
             if x.shape[-2] != self.in_features * self.num_joints_in:
                 x = x.permute(0, 2, 1)
                 x = x.view(x.shape[0], -1, self.num_joints_out, self.in_features-1)
-                attention_dummy = torch.ones([x.shape[0], x.shape[1], x.shape[2], 1])
+                if epoch>=warmup:
+                    attention_dummy = torch.ones([x.shape[0], x.shape[1], x.shape[2], 1])
+                else:
+                    attention_dummy = torch.zeros([x.shape[0], x.shape[1], x.shape[2], 1])
                 if torch.cuda.is_available():
                     attention_dummy = attention_dummy.cuda()
                 x = torch.cat((x, attention_dummy), 3)
