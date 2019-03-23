@@ -402,9 +402,7 @@ if not args.evaluate:
                         for name, param in model_pos_train.named_parameters():
                             if 'attention' in name:
                                 param.requires_grad = True
-                        if args.aug_skels_p:
-                            xxx=777
-                            # inputs_2d = inputs_2d
+
 
                     predicted_3d_pos, attention = model_pos_train(inputs_2d, epoch=epoch, warmup=args.warmup)
                 else:

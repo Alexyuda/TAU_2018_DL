@@ -13,7 +13,6 @@ def parse_args():
     # General arguments
     parser.add_argument('-at', '--attention', action="store_true" ,help='use attention block')
     parser.add_argument('--warmup', default=0, type=int, metavar='N', help='warm-up epochs')
-    parser.add_argument('--aug--skels--p', default=0.1, type=float, dest='aug_skels_p', help='warm-up epochs for semi-supervision')
     parser.add_argument('-d', '--dataset', default='h36m', type=str, metavar='NAME', help='target dataset') # h36m or humaneva
     parser.add_argument('-k', '--keypoints', default='cpn_ft_h36m_dbb', type=str, metavar='NAME', help='2D detections to use')
     parser.add_argument('-str', '--subjects-train', default='S1,S5,S6,S7,S8', type=str, metavar='LIST',
