@@ -12,8 +12,9 @@ def parse_args():
 
     # General arguments
     parser.add_argument('-at', '--attention', action="store_true" ,help='use attention block')
+    parser.add_argument('-sl', '--simmetryLoss', action="store_true" ,help='add simmetry loss ')
     parser.add_argument('--warmup', default=0, type=int, metavar='N', help='warm-up epochs')
-    parser.add_argument('--aug--skels--train--p', default=0.1, type=float, dest='aug_skels_train_p', help='[%] of augmented skeletons in training')
+    parser.add_argument('--aug--skels--train--p', default=0.0, type=float, dest='aug_skels_train_p', help='[%] of augmented skeletons in training')
     parser.add_argument('--aug--skels--test--p', default=0.0, type=float, dest='aug_skels_test_p', help='[%] of augmented skeletons in test')
     parser.add_argument('-d', '--dataset', default='h36m', type=str, metavar='NAME', help='target dataset') # h36m or humaneva
     parser.add_argument('-k', '--keypoints', default='cpn_ft_h36m_dbb', type=str, metavar='NAME', help='2D detections to use')

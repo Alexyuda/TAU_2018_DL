@@ -8,6 +8,9 @@
 import torch
 import numpy as np
 
+def sl(predicted):
+    xxx=777
+
 def mpjpe(predicted, target):
     """
     Mean per-joint position error (i.e. mean Euclidean distance),

@@ -248,6 +248,7 @@ if not args.evaluate:
     lr_decay = args.lr_decay
 
     losses_3d_train = []
+    losses_skel_augm = []
     losses_3d_train_eval = []
     losses_3d_valid = []
 
@@ -296,6 +297,7 @@ if not args.evaluate:
     while epoch < args.epochs:
         start_time = time()
         epoch_loss_3d_train = 0
+        epoch_loss_skel_aug = 0
         epoch_loss_traj_train = 0
         epoch_loss_2d_train_unlabeled = 0
         N = 0
@@ -395,30 +397,55 @@ if not args.evaluate:
 
                 # Predict 3D poses
                 if args.attention:
-                    if epoch < args.warmup:
+                    if epoch >= args.warmup:
                         for name, param in model_pos_train.named_parameters():
-                            if 'attention' in name:
-                                param.requires_grad = False
+                            if 'attention' not in name:
+                                param.requires_grad = True
                     else:
                         for name, param in model_pos_train.named_parameters():
-                            if 'attention' in name:
-                                param.requires_grad = True
+                            if 'attention' not in name:
+                                param.requires_grad = False
 
-                    inputs_2d, augment_skels_ind = augment_skels(inputs_2d,args.aug_skels_train_p)
+
+                    inputs_2d, augment_skels_ind , not_augment_skels_ind= augment_skels(inputs_2d, args.aug_skels_train_p)
+
                     predicted_3d_pos, attention = model_pos_train(inputs_2d, epoch=epoch, warmup=args.warmup)
+                    skel_augm_loss_neg = attention[:, augment_skels_ind, :].reshape(1, -1).squeeze() + 1
+                    skel_augm_loss_pos = 1-attention[:, not_augment_skels_ind, :].reshape(1, -1).squeeze()
+                    classW = augment_skels_ind.shape[0]/not_augment_skels_ind.shape[0]
+                    skel_augm_loss = torch.sum(skel_augm_loss_neg)+\
+                                     classW*torch.sum(skel_augm_loss_pos)
+
+                    predicted_3d_pos, attention = model_pos_train(inputs_2d, epoch=epoch, warmup=args.warmup)
+
+                    # print(attention.reshape(1, -1).squeeze().cpu().detach().numpy().mean())
+                    # print(torch.mean(attention.reshape(1, -1).squeeze()))
+                    # skel_augm_loss = torch.mean(skel_augm_loss_neg.reshape(1, -1).squeeze()) + torch.mean(skel_augm_loss_pos.reshape(1, -1).squeeze())
+
                 else:
                     predicted_3d_pos = model_pos_train(inputs_2d)
 
                 loss_3d_pos = mpjpe(predicted_3d_pos, inputs_3d)
-                epoch_loss_3d_train += inputs_3d.shape[0]*inputs_3d.shape[1] * loss_3d_pos.item()
+                epoch_loss_3d_train += inputs_3d.shape[0] * inputs_3d.shape[1] * loss_3d_pos.item()
+                loss_total = loss_3d_pos
+
+                if (args.aug_skels_train_p>0):
+                    epoch_loss_skel_aug +=  inputs_3d.shape[0] * inputs_3d.shape[1] * skel_augm_loss.item()
+                    loss_total = loss_total + skel_augm_loss
+
+                if args.simmetryLoss:
+                    dists_left = torch.norm(predicted_3d_pos[:,:,kps_left[1:]] - predicted_3d_pos[:,:,dataset.skeleton().parents()[kps_left[1:]]],dim = 3)
+                    dists_right = torch.norm(predicted_3d_pos[:, :, kps_right[1:]] - predicted_3d_pos[:, :,dataset.skeleton().parents()[kps_right[1:]]], dim=3)
+                    loss_total = loss_total + torch.mean(torch.abs(dists_left - dists_right))
+
                 N += inputs_3d.shape[0]*inputs_3d.shape[1]
 
-                loss_total = loss_3d_pos
                 loss_total.backward()
 
                 optimizer.step()
 
         losses_3d_train.append(epoch_loss_3d_train / N)
+        losses_skel_augm.append(epoch_loss_skel_aug / N)
 
         # End-of-epoch evaluation
         with torch.no_grad():
@@ -579,13 +606,24 @@ if not args.evaluate:
                         losses_2d_train_unlabeled_eval[-1],
                         losses_2d_valid[-1]))
             else:
-                print('[%d] time %.2f lr %f 3d_train %f 3d_eval %f 3d_valid %f' % (
-                        epoch + 1,
-                        elapsed,
-                        lr,
-                        losses_3d_train[-1] * 1000,
-                        losses_3d_train_eval[-1] * 1000,
-                        losses_3d_valid[-1]  *1000))
+                if (args.aug_skels_train_p>0):
+                    print('[%d] time %.2f lr %f 3d_train %f 3d_eval %f 3d_valid %f skel_aug %f' % (
+                            epoch + 1,
+                            elapsed,
+                            lr,
+                            losses_3d_train[-1] * 1000,
+                            losses_3d_train_eval[-1] * 1000,
+                            losses_3d_valid[-1]  *1000,
+                            losses_skel_augm[-1] ) )
+                    print(str(torch.mean(attention.reshape(1, -1).squeeze()).item()))
+                else:
+                    print('[%d] time %.2f lr %f 3d_train %f 3d_eval %f 3d_valid %f' % (
+                            epoch + 1,
+                            elapsed,
+                            lr,
+                            losses_3d_train[-1] * 1000,
+                            losses_3d_train_eval[-1] * 1000,
+                            losses_3d_valid[-1]  *1000) )
         
         # Decay learning rate exponentially
         lr *= lr_decay
@@ -626,7 +664,11 @@ if not args.evaluate:
             plt.plot(epoch_x, losses_3d_train[3:], '--', color='C0')
             plt.plot(epoch_x, losses_3d_train_eval[3:], color='C0')
             plt.plot(epoch_x, losses_3d_valid[3:], color='C1')
-            plt.legend(['3d train', '3d train (eval)', '3d valid (eval)'])
+            if (args.aug_skels_train_p>0):
+                plt.plot(epoch_x, losses_skel_augm[3:], color='C2')
+                plt.legend(['3d train', '3d train (eval)', '3d valid (eval)','skel_aug'])
+            else:
+                plt.legend(['3d train', '3d train (eval)', '3d valid (eval)'])
             plt.ylabel('MPJPE (m)')
             plt.xlabel('Epoch')
             plt.xlim((3, epoch))
@@ -647,6 +689,7 @@ if not args.evaluate:
                 plt.plot(epoch_x, losses_2d_train_labeled_eval[3:], color='C0')
                 plt.plot(epoch_x, losses_2d_train_unlabeled[3:], '--', color='C1')
                 plt.plot(epoch_x, losses_2d_train_unlabeled_eval[3:], color='C1')
+
                 plt.plot(epoch_x, losses_2d_valid[3:], color='C2')
                 plt.legend(['2d train labeled (eval)', '2d train unlabeled', '2d train unlabeled (eval)', '2d valid (eval)'])
                 plt.ylabel('MPJPE (2D)')

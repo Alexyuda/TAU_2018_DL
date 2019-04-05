@@ -70,12 +70,17 @@ class TemporalModelBase(nn.Module):
         x = x.view(x.shape[0], x.shape[1], -1)
         x = x.permute(0, 2, 1)
 
-        x, attention = self._forward_blocks(x,epoch = epoch,warmup = warmup)
+        if self.__class__.__name__ == 'TemporalModelOptimized1fAt':
+            x, attention = self._forward_blocks(x)
+            x = x.permute(0, 2, 1)
+            x = x.view(sz[0], -1, self.num_joints_out, 3)
+            return x, attention
+        else:
+            x = self._forward_blocks(x)
+            x = x.permute(0, 2, 1)
+            x = x.view(sz[0], -1, self.num_joints_out, 3)
+            return x
 
-        x = x.permute(0, 2, 1)
-        x = x.view(sz[0], -1, self.num_joints_out, 3)
-        
-        return x, attention
 
 # class TemporalModel(TemporalModelBase):
 #     """
@@ -185,7 +190,7 @@ class TemporalModelOptimized1f(TemporalModelBase):
         self.layers_conv = nn.ModuleList(layers_conv)
         self.layers_bn = nn.ModuleList(layers_bn)
         
-    def _forward_blocks(self, x, wormup = None):
+    def _forward_blocks(self, x):
         x = self.drop(self.relu(self.expand_bn(self.expand_conv(x))))
         
         for i in range(len(self.pad) - 1):
@@ -378,7 +383,7 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
 
             self.shrink_attention = nn.Conv1d(channels_attention, self.receptive_field(), 1)
             self.shrink_attention_output = nn.Conv1d(channels, num_joints_out*3, 1)
-            # self.sigmoid = nn.Sigmoid()
+            self.sigmoid = nn.Sigmoid()
             self.tanh = nn.Tanh()
 
         def _forward_attention(self, x):
@@ -396,15 +401,13 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
             x = self.tanh(x)
             return x
 
-        def _forward_blocks(self, x, epoch , warmup):
+        def _forward_blocks(self, x):
 
             if x.shape[-2] != self.in_features * self.num_joints_in:
                 x = x.permute(0, 2, 1)
                 x = x.view(x.shape[0], -1, self.num_joints_out, self.in_features-1)
-                if epoch>=warmup:
-                    attention_dummy = torch.ones([x.shape[0], x.shape[1], x.shape[2], 1])
-                else:
-                    attention_dummy = torch.zeros([x.shape[0], x.shape[1], x.shape[2], 1])
+                attention_dummy = torch.ones([x.shape[0], x.shape[1], x.shape[2], 1])
+
                 if torch.cuda.is_available():
                     attention_dummy = attention_dummy.cuda()
                 x = torch.cat((x, attention_dummy), 3)
@@ -416,8 +419,9 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
             x = x.view(x.shape[0], -1, self.num_joints_out, self.in_features)
 
             assert(attention.shape[0] == x.shape[0])
-            if epoch>=warmup:
-                x[:, :, :, 2] = x[:, :, :, 2].clone() * attention
+
+            x[:, :, :, 2] = x[:, :, :, 2].clone() * attention
+
             x = x.view(x.shape[0], x.shape[1], -1)
             x = x.permute(0, 2, 1)
 
