@@ -8,8 +8,6 @@
 import torch
 import numpy as np
 
-def sl(predicted):
-    xxx=777
 
 def mpjpe(predicted, target):
     """

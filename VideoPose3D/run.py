@@ -397,46 +397,44 @@ if not args.evaluate:
 
                 # Predict 3D poses
                 if args.attention:
-                    if epoch >= args.warmup:
-                        for name, param in model_pos_train.named_parameters():
-                            if 'attention' not in name:
-                                param.requires_grad = True
-                    else:
-                        for name, param in model_pos_train.named_parameters():
-                            if 'attention' not in name:
-                                param.requires_grad = False
+                    if args.warmup>0:
+                        if epoch >= args.warmup:
+                            for name, param in model_pos_train.named_parameters():
+                                if 'attention' not in name:
+                                    param.requires_grad = True
+                        else:
+                            for name, param in model_pos_train.named_parameters():
+                                if 'attention' not in name:
+                                    param.requires_grad = False
 
-
-                    inputs_2d, augment_skels_ind , not_augment_skels_ind= augment_skels(inputs_2d, args.aug_skels_train_p)
-
-                    predicted_3d_pos, attention = model_pos_train(inputs_2d, epoch=epoch, warmup=args.warmup)
-                    skel_augm_loss_neg = attention[:, augment_skels_ind, :].reshape(1, -1).squeeze() + 1
-                    skel_augm_loss_pos = 1-attention[:, not_augment_skels_ind, :].reshape(1, -1).squeeze()
-                    classW = augment_skels_ind.shape[0]/not_augment_skels_ind.shape[0]
-                    skel_augm_loss = torch.sum(skel_augm_loss_neg)+\
-                                     classW*torch.sum(skel_augm_loss_pos)
+                    if (args.aug_skels_train_p > 0):
+                        inputs_2d, augment_skels_ind , not_augment_skels_ind= augment_skels(inputs_2d, args.aug_skels_train_p)
 
                     predicted_3d_pos, attention = model_pos_train(inputs_2d, epoch=epoch, warmup=args.warmup)
-
-                    # print(attention.reshape(1, -1).squeeze().cpu().detach().numpy().mean())
-                    # print(torch.mean(attention.reshape(1, -1).squeeze()))
-                    # skel_augm_loss = torch.mean(skel_augm_loss_neg.reshape(1, -1).squeeze()) + torch.mean(skel_augm_loss_pos.reshape(1, -1).squeeze())
-
                 else:
                     predicted_3d_pos = model_pos_train(inputs_2d)
 
-                loss_3d_pos = mpjpe(predicted_3d_pos, inputs_3d)
+                # loss_3d_pos = mpjpe(predicted_3d_pos, inputs_3d)
+                loss_3d_pos = torch.mean(torch.norm(predicted_3d_pos - inputs_3d, dim=len(inputs_3d.shape) - 1))
                 epoch_loss_3d_train += inputs_3d.shape[0] * inputs_3d.shape[1] * loss_3d_pos.item()
                 loss_total = loss_3d_pos
 
-                if (args.aug_skels_train_p>0):
-                    epoch_loss_skel_aug +=  inputs_3d.shape[0] * inputs_3d.shape[1] * skel_augm_loss.item()
-                    loss_total = loss_total + skel_augm_loss
+                if (args.aug_skels_train_p>0) and (args.attention is False):
+                    print('WARNING: can not use skeleton augmentation without attention')
 
-                if args.simmetryLoss:
+                if (args.aug_skels_train_p>0):
+                    skel_augm_loss_neg = attention[:, augment_skels_ind, :].reshape(1, -1).squeeze() + 1
+                    skel_augm_loss_pos = 1-attention[:, not_augment_skels_ind, :].reshape(1, -1).squeeze()
+                    skel_augm_loss = torch.mean(skel_augm_loss_neg)+torch.mean(skel_augm_loss_pos)
+                    epoch_loss_skel_aug += inputs_3d.shape[0] * inputs_3d.shape[1] * skel_augm_loss.item()
+                    loss_total += skel_augm_loss
+
+                if args.symmetryLoss:
                     dists_left = torch.norm(predicted_3d_pos[:,:,kps_left[1:]] - predicted_3d_pos[:,:,dataset.skeleton().parents()[kps_left[1:]]],dim = 3)
                     dists_right = torch.norm(predicted_3d_pos[:, :, kps_right[1:]] - predicted_3d_pos[:, :,dataset.skeleton().parents()[kps_right[1:]]], dim=3)
-                    loss_total = loss_total + torch.mean(torch.abs(dists_left - dists_right))
+                    loss_symmetry = torch.mean(torch.max(dists_left,dists_right)/torch.min(dists_left,dists_right) - 1)
+                    # loss_symmetry = torch.mean(torch.abs(dists_left - dists_right))
+                    loss_total += loss_symmetry
 
                 N += inputs_3d.shape[0]*inputs_3d.shape[1]
 
@@ -728,9 +726,10 @@ def evaluate(test_generator, action=None, return_predictions=False):
                     predicted_3d_pos_flip, attention = model_pos(inputs_2d_flip,epoch=epoch, warmup=args.warmup)
                 else:
                     predicted_3d_pos_flip = model_pos(inputs_2d_flip)
-                    predicted_3d_pos_flip[:, :, :, 0] *= -1
-                    predicted_3d_pos_flip[:, :, joints_left + joints_right] = predicted_3d_pos_flip[:, :, joints_right + joints_left]
-                    predicted_3d_pos = (predicted_3d_pos_flip + predicted_3d_pos)/2
+
+                predicted_3d_pos_flip[:, :, :, 0] *= -1
+                predicted_3d_pos_flip[:, :, joints_left + joints_right] = predicted_3d_pos_flip[:, :, joints_right + joints_left]
+                predicted_3d_pos = (predicted_3d_pos_flip + predicted_3d_pos)/2
 
 
             if return_predictions:

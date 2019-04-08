@@ -12,7 +12,7 @@ def parse_args():
 
     # General arguments
     parser.add_argument('-at', '--attention', action="store_true" ,help='use attention block')
-    parser.add_argument('-sl', '--simmetryLoss', action="store_true" ,help='add simmetry loss ')
+    parser.add_argument('-sl', '--symmetryLoss', action="store_true" ,help='add symmetry loss ')
     parser.add_argument('--warmup', default=0, type=int, metavar='N', help='warm-up epochs')
     parser.add_argument('--aug--skels--train--p', default=0.0, type=float, dest='aug_skels_train_p', help='[%] of augmented skeletons in training')
     parser.add_argument('--aug--skels--test--p', default=0.0, type=float, dest='aug_skels_test_p', help='[%] of augmented skeletons in test')
@@ -27,7 +27,7 @@ def parse_args():
                         help='actions to train/test on, separated by comma, or * for all')
     parser.add_argument('-c', '--checkpoint', default='checkpoint', type=str, metavar='PATH',
                         help='checkpoint directory')
-    parser.add_argument('--checkpoint-frequency', default=10, type=int, metavar='N',
+    parser.add_argument('--checkpoint-frequency', default=5, type=int, metavar='N',
                         help='create a checkpoint every N epochs')
     parser.add_argument('-r', '--resume', default='', type=str, metavar='FILENAME',
                         help='checkpoint to resume (file name)')
