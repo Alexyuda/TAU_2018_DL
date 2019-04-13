@@ -433,5 +433,5 @@ class TemporalModelOptimized1fAt(TemporalModelBase):
                 x = self.drop(self.relu(self.layers_bn[2 * i](self.layers_conv[2 * i](x))))
                 x = res + self.drop(self.relu(self.layers_bn[2 * i + 1](self.layers_conv[2 * i + 1](x))))
 
-            x = self.shrink(x)
+            x = self.shrink_attention_output(x)
             return x, attention

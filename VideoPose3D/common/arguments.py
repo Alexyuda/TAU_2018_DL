@@ -14,6 +14,7 @@ def parse_args():
     parser.add_argument('-at', '--attention', action="store_true" ,help='use attention block')
     parser.add_argument('-sl', '--symmetryLoss', action="store_true" ,help='add symmetry loss ')
     parser.add_argument('--warmup', default=0, type=int, metavar='N', help='warm-up epochs')
+    parser.add_argument('--initialize-epoch', action="store_true",default=False,dest='reset_ep', help='initialize lr to default value ')
     parser.add_argument('--aug--skels--train--p', default=0.0, type=float, dest='aug_skels_train_p', help='[%] of augmented skeletons in training')
     parser.add_argument('--aug--skels--test--p', default=0.0, type=float, dest='aug_skels_test_p', help='[%] of augmented skeletons in test')
     parser.add_argument('-d', '--dataset', default='h36m', type=str, metavar='NAME', help='target dataset') # h36m or humaneva
@@ -58,7 +59,7 @@ def parse_args():
     parser.add_argument('--dense', action='store_true', help='use dense convolutions instead of dilated convolutions')
     parser.add_argument('--disable-optimizations', action='store_true', help='disable optimized model for single-frame predictions')
     parser.add_argument('--linear-projection', action='store_true', help='use only linear coefficients for semi-supervised projection')
-    parser.add_argument('--no-bone-length', action='store_false', dest='bone_length_term',
+    parser.add_argument('--bone-length', action='store_true', dest='bone_length_term',
                         help='disable bone length term in semi-supervised settings')
     parser.add_argument('--no-proj', action='store_true', help='disable projection for semi-supervised setting')
     
@@ -75,7 +76,7 @@ def parse_args():
     parser.add_argument('--viz-downsample', type=int, default=1, metavar='N', help='downsample FPS by a factor N')
     parser.add_argument('--viz-size', type=int, default=5, metavar='N', help='image size')
     
-    parser.set_defaults(bone_length_term=True)
+    parser.set_defaults(bone_length_term=False)
     parser.set_defaults(data_augmentation=True)
     parser.set_defaults(test_time_augmentation=True)
     

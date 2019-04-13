@@ -196,8 +196,20 @@ if args.resume or args.evaluate:
     print('Loading checkpoint', chk_filename)
     checkpoint = torch.load(chk_filename, map_location=lambda storage, loc: storage)
     print('This model was trained for {} epochs'.format(checkpoint['epoch']))
-    model_pos_train.load_state_dict(checkpoint['model_pos'])
-    model_pos.load_state_dict(checkpoint['model_pos'])
+
+    #
+    model_dict = model_pos_train.state_dict()
+    # 1. filter out unnecessary keys
+    pretrained_dict = {k: v for k, v in checkpoint['model_pos'].items()  if k in model_dict and model_dict[k].shape == checkpoint['model_pos'][k].shape}
+    # 2. overwrite entries in the existing state dict
+    model_dict.update(pretrained_dict)
+    # 3. load the new state dict
+    model_pos_train.load_state_dict(model_dict)
+    model_pos.load_state_dict(model_dict)
+    #
+
+    # model_pos_train.load_state_dict(checkpoint['model_pos'])
+    # model_pos.load_state_dict(checkpoint['model_pos'])
 
 
 test_generator = ChunkedGenerator(args.batch_size//args.stride, cameras_valid, poses_valid, poses_valid_2d, args.stride,
@@ -277,14 +289,21 @@ if not args.evaluate:
         print('INFO: Semi-supervision on {} frames'.format(semi_generator_eval.num_frames()))
 
     if args.resume:
-        epoch = checkpoint['epoch']
+        if args.reset_ep:
+            epoch = 0
+        else:
+            epoch = checkpoint['epoch']
         if 'optimizer' in checkpoint and checkpoint['optimizer'] is not None:
             optimizer.load_state_dict(checkpoint['optimizer'])
             train_generator.set_random_state(checkpoint['random_state'])
         else:
             print('WARNING: this checkpoint does not contain an optimizer state. The optimizer will be reinitialized.')
-        
-        lr = checkpoint['lr']
+
+        if args.reset_ep:
+            lr = args.learning_rate
+        else:
+            lr = checkpoint['lr']
+
         if semi_supervised:
             model_traj_train.load_state_dict(checkpoint['model_traj'])
             model_traj.load_state_dict(checkpoint['model_traj'])
@@ -414,8 +433,8 @@ if not args.evaluate:
                 else:
                     predicted_3d_pos = model_pos_train(inputs_2d)
 
-                # loss_3d_pos = mpjpe(predicted_3d_pos, inputs_3d)
-                loss_3d_pos = torch.mean(torch.norm(predicted_3d_pos - inputs_3d, dim=len(inputs_3d.shape) - 1))
+                loss_3d_pos = mpjpe(predicted_3d_pos, inputs_3d)
+               #  loss_3d_pos = torch.mean(torch.norm(predicted_3d_pos - inputs_3d, dim=len(inputs_3d.shape) - 1))
                 epoch_loss_3d_train += inputs_3d.shape[0] * inputs_3d.shape[1] * loss_3d_pos.item()
                 loss_total = loss_3d_pos
 
@@ -432,12 +451,19 @@ if not args.evaluate:
                 if args.symmetryLoss:
                     dists_left = torch.norm(predicted_3d_pos[:,:,kps_left[1:]] - predicted_3d_pos[:,:,dataset.skeleton().parents()[kps_left[1:]]],dim = 3)
                     dists_right = torch.norm(predicted_3d_pos[:, :, kps_right[1:]] - predicted_3d_pos[:, :,dataset.skeleton().parents()[kps_right[1:]]], dim=3)
-                    loss_symmetry = torch.mean(torch.max(dists_left,dists_right)/torch.min(dists_left,dists_right) - 1)
-                    # loss_symmetry = torch.mean(torch.abs(dists_left - dists_right))
+                    loss_symmetry = torch.mean(torch.abs(dists_left - dists_right))
                     loss_total += loss_symmetry
 
-                N += inputs_3d.shape[0]*inputs_3d.shape[1]
+                if args.bone_length_term:
+                    split_idx = round(inputs_3d.shape[0]/2)
+                    dists = predicted_3d_pos[:, :, kps_left[1:] + kps_right[1:]] - predicted_3d_pos[:, :, dataset.skeleton().parents()[kps_left[1:] + kps_right[1:]]]
+                    bone_lengths = torch.norm(dists, dim=3)
+                    penalty = torch.mean(torch.abs(torch.mean(bone_lengths[:split_idx], dim=0) \
+                                                   - torch.mean(bone_lengths[split_idx:], dim=0)))
+                    loss_total += penalty
 
+                N += inputs_3d.shape[0]*inputs_3d.shape[1]
+                # print(loss_total)
                 loss_total.backward()
 
                 optimizer.step()

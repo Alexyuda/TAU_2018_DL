@@ -11,7 +11,7 @@ def augment_skels(skels, p):
         randomTen = torch.randn(skels[:, skelPermute, :, :].shape)
         if torch.cuda.is_available():
             randomTen = randomTen.cuda()
-        skels[:, skelPermute, :, :] = skels[:, skelPermute, :, :] * randomTen
-        # skels[:, skelPermute, :, :] = skels[:, skelPermute, :, :] * 0
+        #skels[:, skelPermute, :, :] = skels[:, skelPermute, :, :] * randomTen
+        skels[:, skelPermute, :, :] = skels[:, skelPermute, :, :] * 0
 
     return skels, skelPermute, nonskelPermute
