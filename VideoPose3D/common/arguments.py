@@ -17,6 +17,8 @@ def parse_args():
     parser.add_argument('--initialize-epoch', action="store_true",default=False,dest='reset_ep', help='initialize lr to default value ')
     parser.add_argument('--aug--skels--train--p', default=0.0, type=float, dest='aug_skels_train_p', help='[%] of augmented skeletons in training')
     parser.add_argument('--aug--skels--test--p', default=0.0, type=float, dest='aug_skels_test_p', help='[%] of augmented skeletons in test')
+    parser.add_argument('--interp_skels_test--p', default=0.0, type=float, dest='interp_skels_test_p', help='replace [%] of skeltons using interpolations')
+
     parser.add_argument('-d', '--dataset', default='h36m', type=str, metavar='NAME', help='target dataset') # h36m or humaneva
     parser.add_argument('-k', '--keypoints', default='cpn_ft_h36m_dbb', type=str, metavar='NAME', help='2D detections to use')
     parser.add_argument('-str', '--subjects-train', default='S1,S5,S6,S7,S8', type=str, metavar='LIST',

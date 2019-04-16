@@ -327,19 +327,19 @@ if not args.evaluate:
             model_traj_train.train()
             for (_, batch_3d, batch_2d), (cam_semi, _, batch_2d_semi) in \
                 zip(train_generator.next_epoch(), semi_generator.next_epoch()):
-                
+
                 # Fall back to supervised training for the first epoch (to avoid instability)
                 skip = epoch < args.warmup
-                
+
                 cam_semi = torch.from_numpy(cam_semi.astype('float32'))
                 inputs_3d = torch.from_numpy(batch_3d.astype('float32'))
                 if torch.cuda.is_available():
                     cam_semi = cam_semi.cuda()
                     inputs_3d = inputs_3d.cuda()
-                    
+
                 inputs_traj = inputs_3d[:, :, :1].clone()
                 inputs_3d[:, :, 0] = 0
-                
+
                 # Split point between labeled and unlabeled samples in the batch
                 split_idx = inputs_3d.shape[0]
 
@@ -375,7 +375,7 @@ if not args.evaluate:
                         target_semi = inputs_2d_semi[:, pad:-pad, :, :2].contiguous()
                     else:
                         target_semi = inputs_2d_semi[:, :, :, :2].contiguous()
-                        
+
                     projection_func = project_to_2d_linear if args.linear_projection else project_to_2d
                     reconstruction_semi = projection_func(predicted_semi + predicted_traj_cat[split_idx:], cam_semi)
 
@@ -383,7 +383,7 @@ if not args.evaluate:
                     epoch_loss_2d_train_unlabeled += predicted_semi.shape[0]*predicted_semi.shape[1] * loss_reconstruction.item()
                     if not args.no_proj:
                         loss_total += loss_reconstruction
-                    
+
                     # Bone length term to enforce kinematic constraints
                     if args.bone_length_term:
                         dists = predicted_3d_pos_cat[:, :, 1:] - predicted_3d_pos_cat[:, :, dataset.skeleton().parents()[1:]]
@@ -391,8 +391,8 @@ if not args.evaluate:
                         penalty = torch.mean(torch.abs(torch.mean(bone_lengths[:split_idx], dim=0) \
                                                      - torch.mean(bone_lengths[split_idx:], dim=0)))
                         loss_total += penalty
-                        
-                    
+
+
                     N_semi += predicted_semi.shape[0]*predicted_semi.shape[1]
                 else:
                     N_semi += 1 # To avoid division by zero
@@ -444,9 +444,14 @@ if not args.evaluate:
                 if (args.aug_skels_train_p>0):
                     skel_augm_loss_neg = attention[:, augment_skels_ind, :].reshape(1, -1).squeeze() + 1
                     skel_augm_loss_pos = 1-attention[:, not_augment_skels_ind, :].reshape(1, -1).squeeze()
-                    skel_augm_loss = torch.mean(skel_augm_loss_neg)+torch.mean(skel_augm_loss_pos)
+                    classW = skel_augm_loss_neg.shape[0]/skel_augm_loss_pos.shape[0]
+                    skel_augm_loss = (torch.sum(skel_augm_loss_neg))+ classW*(torch.sum(skel_augm_loss_pos))
                     epoch_loss_skel_aug += inputs_3d.shape[0] * inputs_3d.shape[1] * skel_augm_loss.item()
-                    loss_total += skel_augm_loss
+                    loss_total += skel_augm_loss 
+
+                    print(str(skel_augm_loss.item()))
+
+
 
                 if args.symmetryLoss:
                     dists_left = torch.norm(predicted_3d_pos[:,:,kps_left[1:]] - predicted_3d_pos[:,:,dataset.skeleton().parents()[kps_left[1:]]],dim = 3)
@@ -463,8 +468,9 @@ if not args.evaluate:
                     loss_total += penalty
 
                 N += inputs_3d.shape[0]*inputs_3d.shape[1]
-                # print(loss_total)
+
                 loss_total.backward()
+
 
                 optimizer.step()
 
@@ -483,7 +489,7 @@ if not args.evaluate:
             epoch_loss_traj_valid = 0
             epoch_loss_2d_valid = 0
             N = 0
-            
+
             if not args.no_eval:
                 # Evaluate on test set
                 for cam, batch, batch_2d in test_generator.next_epoch():
@@ -539,7 +545,7 @@ if not args.evaluate:
                     if batch_2d.shape[1] == 0:
                         # This can only happen when downsampling the dataset
                         continue
-                        
+
                     inputs_3d = torch.from_numpy(batch.astype('float32'))
                     inputs_2d = torch.from_numpy(batch_2d.astype('float32'))
                     if torch.cuda.is_available():
@@ -607,7 +613,7 @@ if not args.evaluate:
                     losses_2d_train_unlabeled_eval.append(epoch_loss_2d_train_unlabeled_eval / N_semi)
 
         elapsed = (time() - start_time)/60
-        
+
         if args.no_eval:
             print('[%d] time %.2f lr %f 3d_train %f' % (
                     epoch + 1,
@@ -648,24 +654,24 @@ if not args.evaluate:
                             losses_3d_train[-1] * 1000,
                             losses_3d_train_eval[-1] * 1000,
                             losses_3d_valid[-1]  *1000) )
-        
+
         # Decay learning rate exponentially
         lr *= lr_decay
         for param_group in optimizer.param_groups:
             param_group['lr'] *= lr_decay
         epoch += 1
-        
+
         # Decay BatchNorm momentum
         momentum = initial_momentum * np.exp(-epoch/args.epochs * np.log(initial_momentum/final_momentum))
         model_pos_train.set_bn_momentum(momentum)
         if semi_supervised:
             model_traj_train.set_bn_momentum(momentum)
-            
+
         # Save checkpoint if necessary
         if epoch % args.checkpoint_frequency == 0:
             chk_path = os.path.join(args.checkpoint, 'epoch_{}.bin'.format(epoch))
             print('Saving checkpoint to', chk_path)
-            
+
             torch.save({
                 'epoch': epoch,
                 'lr': lr,
@@ -675,14 +681,14 @@ if not args.evaluate:
                 'model_traj': model_traj_train.state_dict() if semi_supervised else None,
                 'random_state_semi': semi_generator.random_state() if semi_supervised else None,
             }, chk_path)
-            
+
         # Save training curves after every epoch, as .png images (if requested)
         if args.export_training_curves and epoch > 3:
             if 'matplotlib' not in sys.modules:
                 import matplotlib
                 matplotlib.use('Agg')
                 import matplotlib.pyplot as plt
-            
+
             plt.figure()
             epoch_x = np.arange(3, len(losses_3d_train)) + 1
             plt.plot(epoch_x, losses_3d_train[3:], '--', color='C0')
@@ -728,6 +734,7 @@ def evaluate(test_generator, action=None, return_predictions=False):
     epoch_loss_3d_pos_procrustes = 0
     epoch_loss_3d_pos_scale = 0
     epoch_loss_3d_vel = 0
+
     with torch.no_grad():
         model_pos.eval()
         N = 0
@@ -737,8 +744,10 @@ def evaluate(test_generator, action=None, return_predictions=False):
                 inputs_2d = inputs_2d.cuda()
 
             # Positional model
+                if (args.aug_skels_test_p > 0):
+                    inputs_2d, augment_skels_ind, not_augment_skels_ind = augment_skels(inputs_2d,args.aug_skels_test_p)
                 if args.attention:
-                    predicted_3d_pos, attention = model_pos(inputs_2d, epoch=epoch, warmup=args.warmup)
+                    predicted_3d_pos, attention = model_pos(inputs_2d)
                 else:
                     predicted_3d_pos = model_pos(inputs_2d)
 
@@ -748,8 +757,8 @@ def evaluate(test_generator, action=None, return_predictions=False):
                 inputs_2d_flip = inputs_2d.clone()
                 inputs_2d_flip[:,:,:, 0] *= -1
                 inputs_2d_flip[:, :, kps_left + kps_right] = inputs_2d_flip[:, :, kps_right + kps_left]
-                if  args.attention:
-                    predicted_3d_pos_flip, attention = model_pos(inputs_2d_flip,epoch=epoch, warmup=args.warmup)
+                if args.attention:
+                    predicted_3d_pos_flip, attention = model_pos(inputs_2d_flip)
                 else:
                     predicted_3d_pos_flip = model_pos(inputs_2d_flip)
 
