@@ -744,12 +744,12 @@ def evaluate(test_generator, action=None, return_predictions=False):
                 inputs_2d = inputs_2d.cuda()
 
             # Positional model
-                if (args.aug_skels_test_p > 0):
-                    inputs_2d, augment_skels_ind, not_augment_skels_ind = augment_skels(inputs_2d,args.aug_skels_test_p)
-                if args.attention:
-                    predicted_3d_pos, attention = model_pos(inputs_2d)
-                else:
-                    predicted_3d_pos = model_pos(inputs_2d)
+            if (args.aug_skels_test_p > 0):
+                inputs_2d, augment_skels_ind, not_augment_skels_ind = augment_skels(inputs_2d,args.aug_skels_test_p)
+            if args.attention:
+                predicted_3d_pos, attention = model_pos(inputs_2d)
+            else:
+                predicted_3d_pos = model_pos(inputs_2d)
 
             # Test-time augmentation (if enabled)
             if test_generator.augment_enabled():

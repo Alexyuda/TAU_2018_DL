@@ -7,3 +7,4 @@ VideoPose3D/common/__pycache__/
 *.mp4
 VideoPose3D/common/__init__.py
 VideoPose3D/__init__.py
+Res.xlsx

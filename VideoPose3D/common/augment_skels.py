@@ -16,11 +16,3 @@ def augment_skels(skels, p):
 
     return skels, skelPermute, nonskelPermute
 
-def interp_skels(skels,p):
-    nSeq, nSkels , nJoints, nFeatures = skels.shape
-    randPerm = np.random.permutation(nSkels)
-    skelPermute = randPerm[0:round(p*nSkels)]
-    nonskelPermute = randPerm[round(p * nSkels):]
-
-    # interp here
-    # calc dist to
